@@ -1,0 +1,4 @@
+fastapi
+uvicorn==0.18.2
+sqlalchemy
+psycopg2-binary
