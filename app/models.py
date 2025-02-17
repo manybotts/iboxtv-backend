@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean
-from database import Base
+from app.database import Base
 
 class Show(Base):
     __tablename__ = "shows"
