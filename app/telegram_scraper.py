@@ -1,7 +1,7 @@
 def fetch_latest_shows():
     """
     Simulated function to fetch latest shows from Telegram.
-    Replace this logic with real Telegram API integration as needed.
+    Replace with actual Telegram API integration as needed.
     """
     return [
         {
