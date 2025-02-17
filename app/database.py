@@ -3,9 +3,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Retrieve the DATABASE_URL environment variable.
-# If not set, use a default local PostgreSQL connection string.
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/iboxtv_db")
+# Retrieve DATABASE_URL, or if not set, fall back to HEROKU_POSTGRESQL_PURPLE_URL,
+# otherwise use a default local connection.
+DATABASE_URL = os.getenv("DATABASE_URL", os.getenv("HEROKU_POSTGRESQL_PURPLE_URL", "postgresql://user:password@localhost/iboxtv_db"))
 
 # Replace 'postgres://' with 'postgresql://' if necessary.
 if DATABASE_URL.startswith("postgres://"):
