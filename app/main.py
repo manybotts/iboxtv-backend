@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
-import models, schemas
-from database import SessionLocal, engine
-from telegram_scraper import fetch_latest_shows
+from app import models, schemas
+from app.database import SessionLocal, engine
+from app.telegram_scraper import fetch_latest_shows
 
-# Create all tables in the database
+# Create database tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="iBOX TV API")
