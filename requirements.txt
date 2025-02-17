@@ -1,4 +1,6 @@
 fastapi
-uvicorn==0.18.2
+uvicorn
 sqlalchemy
 psycopg2-binary
+pydantic
+
