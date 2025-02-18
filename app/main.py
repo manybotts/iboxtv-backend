@@ -1,8 +1,13 @@
+import logging
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app import models, schemas
 from app.database import SessionLocal, engine
 from app.telegram_scraper import fetch_latest_shows
+
+# Set up basic logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Create database tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
@@ -13,6 +18,32 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    finally:
+        db.close()
+
+@app.on_event("startup")
+async def populate_db():
+    logger.info("Startup event: Checking if the database has TV show data.")
+    db = SessionLocal()
+    try:
+        count = db.query(models.Show).count()
+        logger.info(f"Current show count in database: {count}")
+        if count == 0:
+            new_shows_data = fetch_latest_shows()
+            for show_data in new_shows_data:
+                new_show = models.Show(
+                    title=show_data["title"],
+                    download_link=show_data["download_link"],
+                    is_streamable=show_data.get("is_streamable", False),
+                    popularity=show_data.get("popularity", 0)
+                )
+                db.add(new_show)
+            db.commit()
+            logger.info("Database was empty. Inserted sample TV shows.")
+        else:
+            logger.info("Database already contains data; skipping population.")
+    except Exception as e:
+        logger.error("Error during startup population: %s", e)
     finally:
         db.close()
 
@@ -37,7 +68,10 @@ async def fetch_shows(db: Session = Depends(get_db)):
             db.commit()
             db.refresh(new_show)
             inserted_shows.append(new_show)
-    return {"message": f"Fetched and inserted {len(inserted_shows)} new shows", "shows": [show.title for show in inserted_shows]}
+    return {
+        "message": f"Fetched and inserted {len(inserted_shows)} new shows",
+        "shows": [show.title for show in inserted_shows]
+    }
 
 @app.get("/shows", response_model=list[schemas.Show], tags=["Shows"])
 async def list_shows(db: Session = Depends(get_db)):
