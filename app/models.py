@@ -10,5 +10,5 @@ class Show(BaseModel):
     popularity: int = 0
 
     model_config = {
-        "from_attributes": True  # For Pydantic v2 (for v1, use "orm_mode": True)
+        "from_attributes": True  # For Pydantic v2 (for v1 use "orm_mode": True)
     }
