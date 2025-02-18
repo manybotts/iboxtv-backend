@@ -3,7 +3,8 @@ import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# Retrieve the FIREBASE_SERVICE_ACCOUNT environment variable.
+# Retrieve the Firebase service account credentials.
+# It can be either a file path or a JSON string.
 SERVICE_ACCOUNT = os.getenv("FIREBASE_SERVICE_ACCOUNT")
 if not SERVICE_ACCOUNT:
     raise ValueError("FIREBASE_SERVICE_ACCOUNT environment variable is not set.")
