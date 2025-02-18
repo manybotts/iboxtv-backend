@@ -3,8 +3,9 @@ import os
 import asyncio
 import requests
 from telethon import TelegramClient
+from telethon.sessions import MemorySession
 
-# Retrieve Telegram credentials and channel info
+# Retrieve your Telegram API credentials and channel info from environment variables
 API_ID = int(os.getenv("TELEGRAM_API_ID", 0))
 API_HASH = os.getenv("TELEGRAM_API_HASH")
 CHANNEL = os.getenv("TELEGRAM_CHANNEL")  # e.g., "@iBOXTVChannel"
@@ -14,19 +15,21 @@ SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING", "")
 if not API_ID or not API_HASH or not CHANNEL or not OMDB_API_KEY:
     raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_CHANNEL, and OMDB_API_KEY environment variables.")
 
+# Initialize the Telegram client using an in-memory session to avoid SQLite locking issues.
 client = None
-try:
-    if SESSION_STRING and hasattr(TelegramClient, "from_session_string"):
+if SESSION_STRING and hasattr(TelegramClient, "from_session_string"):
+    try:
         client = TelegramClient.from_session_string(SESSION_STRING, API_ID, API_HASH)
-    else:
-        client = TelegramClient('iboxtv_session', API_ID, API_HASH)
-except Exception as e:
-    print("Error initializing TelegramClient from session string:", e)
-    client = TelegramClient('iboxtv_session', API_ID, API_HASH)
+    except Exception as e:
+        print("Error initializing TelegramClient from session string:", e)
+        client = TelegramClient(MemorySession(), API_ID, API_HASH)
+else:
+    client = TelegramClient(MemorySession(), API_ID, API_HASH)
 
 async def fetch_messages(limit=10):
     await client.start()
     try:
+        # Get the channel entity and fetch the latest messages
         channel_entity = await client.get_entity(CHANNEL)
         messages = await client.get_messages(channel_entity, limit=limit)
         return messages
@@ -35,7 +38,7 @@ async def fetch_messages(limit=10):
 
 def fetch_omdb_data(title):
     """
-    Calls the OMDb API to get additional show data (poster and description) using the show title.
+    Calls the OMDb API to retrieve additional show data (poster and description) using the show title.
     """
     try:
         url = f"http://www.omdbapi.com/?apikey={OMDB_API_KEY}&t={title}"
@@ -54,6 +57,7 @@ def fetch_omdb_data(title):
 def parse_message(message):
     """
     Parses a Telegram message caption with the following structure:
+    
       Line 1: Show Name
       Line 2: Season and Episode info (e.g., "Season 23 Episode 1")
       Line 3: Contains the text "CLICK HERE" with an embedded URL for downloads.
@@ -68,15 +72,22 @@ def parse_message(message):
     """
     if not message.text:
         return None
+
+    # Split the message text into non-empty lines
     lines = [line.strip() for line in message.text.split("\n") if line.strip()]
     if len(lines) < 3:
         return None
+
     show_title = lines[0]
     season_episode = lines[1]
-    # Extract URL from the text "CLICK HERE" using regex
+
+    # Extract the download URL from the third line using regex
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
+
+    # Enrich data using OMDb API
     omdb_data = fetch_omdb_data(show_title)
+
     return {
         "title": show_title,
         "season_episode": season_episode,
