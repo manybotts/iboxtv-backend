@@ -40,8 +40,8 @@ def parse_message(message: Update) -> dict:
       - Line 3: Contains "CLICK HERE" with an embedded URL for downloads.
     
     Returns a dictionary with:
-      - title: Show name (from line 1)
-      - season_episode: Season/Episode info (from line 2)
+      - title: (from line 1)
+      - season_episode: (from line 2)
       - download_link: URL extracted from line 3 (following "CLICK HERE")
       - poster: Poster URL fetched from OMDb API using the show title
       - description: Show description (Plot) from OMDb API using the show title
@@ -57,7 +57,6 @@ def parse_message(message: Update) -> dict:
 
     show_title = lines[0]
     season_episode = lines[1]
-
     # Look for "CLICK HERE" followed by a URL in the third line.
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
@@ -72,15 +71,13 @@ def parse_message(message: Update) -> dict:
         "popularity": 0
     }
 
-def fetch_latest_shows(limit: int = 10) -> list:
+async def fetch_latest_shows(limit: int = 10) -> list:
     """
-    Synchronously fetches updates from the bot and returns a list of show dictionaries.
-    Filters updates where the message chat username matches TARGET (without the '@').
-    We pass a timeout parameter to get_updates() so that if no updates arrive within 10 seconds,
-    it returns an empty list.
+    Asynchronously fetches updates from the bot and returns a list of show dictionaries.
+    We now await bot.get_updates(timeout=10) so that we get a list of updates.
     """
     try:
-        updates = bot.get_updates(timeout=10)
+        updates = await bot.get_updates(timeout=10)
     except TelegramError as e:
         print(f"Error fetching updates: {e}")
         return []
@@ -95,9 +92,3 @@ def fetch_latest_shows(limit: int = 10) -> list:
         if len(shows) >= limit:
             break
     return shows
-
-# Provide an async wrapper for FastAPI endpoints to await this synchronous function.
-async def async_fetch_latest_shows(limit: int = 10) -> list:
-    import asyncio
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, fetch_latest_shows, limit)
