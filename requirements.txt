@@ -1,7 +1,6 @@
 fastapi
 uvicorn
-sqlalchemy
-psycopg2-binary
-pydantic
-telethon>=1.25.0
+firebase-admin
+telethon
 requests
+pydantic
