@@ -1,50 +1,59 @@
 import logging
-from fastapi import FastAPI, HTTPException, Depends
-from sqlalchemy.orm import Session
-from .database import SessionLocal, engine
-from . import models, schemas, telegram_scraper
-
-# Create database tables if they don't exist
-models.Base.metadata.create_all(bind=engine)
+from fastapi import FastAPI, HTTPException
+from app.firebase_db import db
+from app import telegram_scraper, schemas
 
 app = FastAPI(title="iBOX TV API (Firebase)")
 logger = logging.getLogger(__name__)
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# Helper functions for Firestore operations
 
-# Helper function to insert a show if it doesn't exist (case-insensitive check)
-def insert_show_if_not_exists(db: Session, show_data):
-    existing = db.query(models.Show).filter(models.Show.title.ilike(show_data["title"])).first()
-    if not existing:
-        new_show = models.Show(
-            title=show_data["title"],
-            download_link=show_data["download_link"],
-            is_streamable=show_data.get("is_streamable", False),
-            popularity=show_data.get("popularity", 0)
-        )
-        db.add(new_show)
-        try:
-            db.commit()
-            db.refresh(new_show)
-            return True
-        except Exception as e:
-            db.rollback()
-            logger.error("Error inserting show %s: %s", show_data["title"], e)
-    return False
+def get_all_shows():
+    shows_ref = db.collection("shows")
+    docs = shows_ref.stream()
+    shows = []
+    for doc in docs:
+        data = doc.to_dict()
+        data["id"] = doc.id
+        shows.append(data)
+    return shows
+
+def insert_show_if_not_exists(show_data):
+    # Check if a show with the same title exists (case-sensitive comparison)
+    query = db.collection("shows").where("title", "==", show_data["title"]).get()
+    if query:
+        return False  # Show already exists
+    # Insert the new show
+    db.collection("shows").add(show_data)
+    return True
+
+def get_trending_shows(limit=10):
+    shows_ref = db.collection("shows").order_by("popularity", direction="DESCENDING").limit(limit)
+    docs = shows_ref.stream()
+    trending = []
+    for doc in docs:
+        data = doc.to_dict()
+        data["id"] = doc.id
+        trending.append(data)
+    return trending
+
+def get_show_by_id(show_id: str):
+    doc = db.collection("shows").document(show_id).get()
+    if doc.exists:
+        data = doc.to_dict()
+        data["id"] = doc.id
+        return data
+    return None
 
 @app.on_event("startup")
 async def populate_db():
     logger.info("Startup: Checking if the database has TV show data.")
-    db = next(get_db())
-    if db.query(models.Show).count() == 0:
+    if not get_all_shows():
         new_shows = await telegram_scraper.fetch_latest_shows(limit=10)
         for show in new_shows:
-            insert_show_if_not_exists(db, show)
+            inserted = insert_show_if_not_exists(show)
+            if inserted:
+                logger.info("Inserted show: %s", show["title"])
         logger.info("Database population complete.")
     else:
         logger.info("Database already contains data; skipping population.")
@@ -54,27 +63,26 @@ async def read_root():
     return {"message": "Welcome to the iBOX TV API (Firebase)"}
 
 @app.get("/fetch", tags=["Shows"])
-async def fetch_shows(db: Session = Depends(get_db)):
-    new_shows_data = await telegram_scraper.fetch_latest_shows(limit=10)
+async def fetch_shows():
+    new_shows = await telegram_scraper.fetch_latest_shows(limit=10)
     inserted_shows = []
-    for show_data in new_shows_data:
-        if insert_show_if_not_exists(db, show_data):
-            inserted_shows.append(show_data["title"])
+    for show in new_shows:
+        if insert_show_if_not_exists(show):
+            inserted_shows.append(show["title"])
     return {"message": f"Fetched and inserted {len(inserted_shows)} new shows", "shows": inserted_shows}
 
 @app.get("/shows", response_model=list[schemas.Show], tags=["Shows"])
-async def list_shows(db: Session = Depends(get_db)):
-    shows = db.query(models.Show).all()
-    return shows
+async def list_shows():
+    return get_all_shows()
 
 @app.get("/trending", response_model=list[schemas.Show], tags=["Shows"])
-async def trending_shows(db: Session = Depends(get_db)):
-    trending = db.query(models.Show).order_by(models.Show.popularity.desc()).limit(10).all()
-    return trending
+async def trending_shows():
+    return get_trending_shows(limit=10)
 
 @app.get("/stream-status/{show_id}", tags=["Shows"])
-async def stream_status(show_id: int, db: Session = Depends(get_db)):
-    show = db.query(models.Show).filter(models.Show.id == show_id).first()
+async def stream_status(show_id: str):
+    show = get_show_by_id(show_id)
     if not show:
         raise HTTPException(status_code=404, detail="Show not found")
-    return {"downloadable": bool(show.download_link), "streamable": False}
+    # For now, only the download option is enabled.
+    return {"downloadable": bool(show.get("download_link")), "streamable": False}
