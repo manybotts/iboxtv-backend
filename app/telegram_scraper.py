@@ -4,7 +4,7 @@ import asyncio
 import requests
 from telethon import TelegramClient
 
-# Retrieve your Telegram API credentials, channel info, and (optionally) a session string from environment variables
+# Retrieve your Telegram API credentials and channel info from environment variables
 API_ID = int(os.getenv("TELEGRAM_API_ID", 0))
 API_HASH = os.getenv("TELEGRAM_API_HASH")
 CHANNEL = os.getenv("TELEGRAM_CHANNEL")  # e.g., "@iBOXTVChannel"
@@ -14,20 +14,21 @@ SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING", "")
 if not API_ID or not API_HASH or not CHANNEL or not OMDB_API_KEY:
     raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_CHANNEL, and OMDB_API_KEY environment variables.")
 
-# Attempt to create a client using the session string if available and supported; otherwise, create a new session.
-try:
-    if SESSION_STRING and hasattr(TelegramClient, "from_session_string"):
+client = None
+# Attempt to initialize TelegramClient using the session string if provided and supported.
+if SESSION_STRING and hasattr(TelegramClient, "from_session_string"):
+    try:
         client = TelegramClient.from_session_string(SESSION_STRING, API_ID, API_HASH)
-    else:
+    except Exception as e:
+        print("Error initializing TelegramClient from session string:", e)
+        # Fallback: Create a new client instance
         client = TelegramClient('iboxtv_session', API_ID, API_HASH)
-except Exception as e:
-    print("Error initializing TelegramClient from session string:", e)
+else:
     client = TelegramClient('iboxtv_session', API_ID, API_HASH)
 
 async def fetch_messages(limit=10):
     await client.start()
     try:
-        # Get the channel entity and fetch the latest messages
         channel_entity = await client.get_entity(CHANNEL)
         messages = await client.get_messages(channel_entity, limit=limit)
         return messages
@@ -36,7 +37,7 @@ async def fetch_messages(limit=10):
 
 def fetch_omdb_data(title):
     """
-    Calls the OMDb API to get additional show data (poster and description) using the show title.
+    Calls the OMDb API to retrieve additional show data (poster and description) using the show title.
     """
     try:
         url = f"http://www.omdbapi.com/?apikey={OMDB_API_KEY}&t={title}"
@@ -58,7 +59,7 @@ def parse_message(message):
 
       Line 1: Show Name
       Line 2: Season and Episode info (e.g., "Season 23 Episode 1")
-      Line 3: Contains text like "CLICK HERE" with an embedded URL for downloads.
+      Line 3: Contains the text "CLICK HERE" with an embedded URL for downloads.
 
     Returns a dictionary with:
       - title: The show name from line 1.
@@ -71,20 +72,19 @@ def parse_message(message):
     if not message.text:
         return None
 
-    # Split the message text into non-empty lines
+    # Split message into non-empty lines
     lines = [line.strip() for line in message.text.split("\n") if line.strip()]
     if len(lines) < 3:
         return None
 
-    # Extract data from the lines
     show_title = lines[0]
     season_episode = lines[1]
 
-    # Extract URL from the third line: search for "CLICK HERE" followed by a URL
+    # Extract URL from the third line; assumes "CLICK HERE" is followed by the URL somewhere in the text.
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
 
-    # Fetch additional details from the OMDb API using the show title
+    # Enrich data using OMDb API
     omdb_data = fetch_omdb_data(show_title)
 
     return {
@@ -93,7 +93,7 @@ def parse_message(message):
         "download_link": download_link,
         "poster": omdb_data.get("poster", ""),
         "description": omdb_data.get("description", ""),
-        "popularity": 0  # Adjust if needed
+        "popularity": 0
     }
 
 def fetch_latest_shows(limit=10):
