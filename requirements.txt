@@ -3,4 +3,5 @@ uvicorn
 sqlalchemy
 psycopg2-binary
 pydantic
-
+telethon==1.24.0  # Adjust the version as needed
+requests
