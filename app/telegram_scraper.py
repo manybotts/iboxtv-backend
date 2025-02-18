@@ -1,14 +1,13 @@
 import re
 import os
 import requests
-import asyncio
 from telegram import Bot, Update
 from telegram.error import TelegramError
 
 # Retrieve environment variables
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OMDB_API_KEY = os.getenv("OMDB_API_KEY")
-# Use TELEGRAM_GROUP if provided; otherwise, fallback to TELEGRAM_CHANNEL.
+# Use TELEGRAM_GROUP if set; otherwise, fallback to TELEGRAM_CHANNEL
 TARGET = os.getenv("TELEGRAM_GROUP") or os.getenv("TELEGRAM_CHANNEL")
 
 if not BOT_TOKEN or not OMDB_API_KEY or not TARGET:
@@ -18,22 +17,42 @@ if not BOT_TOKEN or not OMDB_API_KEY or not TARGET:
 bot = Bot(token=BOT_TOKEN)
 
 def fetch_omdb_data(title: str) -> dict:
+    """
+    Calls the OMDb API to retrieve additional show data (poster and description) using the provided show title.
+    """
     try:
         url = f"http://www.omdbapi.com/?apikey={OMDB_API_KEY}&t={title}"
         response = requests.get(url)
         if response.status_code == 200:
             data = response.json()
             if data.get("Response") == "True":
-                return {"poster": data.get("Poster", ""), "description": data.get("Plot", "")}
+                return {
+                    "poster": data.get("Poster", ""),
+                    "description": data.get("Plot", "")
+                }
     except Exception as e:
         print("OMDb API error:", e)
     return {"poster": "", "description": ""}
 
 def parse_message(message: Update) -> dict:
+    """
+    Expects the Telegram message caption to have at least three non-empty lines:
+      - Line 1: Show Name
+      - Line 2: Season and Episode info (e.g., "Season 23 Episode 1")
+      - Line 3: Contains "CLICK HERE" with an embedded URL for downloads.
+    
+    Returns a dictionary with:
+      - title: Show name (from line 1)
+      - season_episode: Season/Episode info (from line 2)
+      - download_link: The URL extracted from line 3 (following "CLICK HERE")
+      - poster: Poster URL from OMDb API using the show title
+      - description: Show description (Plot) from OMDb API using the show title
+      - popularity: Defaults to 0
+    """
     if not message.text:
         return None
 
-    # Split the message text into non-empty lines.
+    # Split the text into non-empty lines.
     lines = [line.strip() for line in message.text.split("\n") if line.strip()]
     if len(lines) < 3:
         return None
@@ -41,7 +60,7 @@ def parse_message(message: Update) -> dict:
     show_title = lines[0]
     season_episode = lines[1]
 
-    # Extract the download URL from the third line.
+    # Look for "CLICK HERE" followed by a URL in the third line.
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
     omdb_data = fetch_omdb_data(show_title)
@@ -55,17 +74,18 @@ def parse_message(message: Update) -> dict:
         "popularity": 0
     }
 
-def fetch_latest_shows(limit: int = 10) -> list:
+async def fetch_latest_shows(limit: int = 10) -> list:
     """
-    Synchronously fetches updates from the bot and returns a list of show dictionaries.
-    We filter updates whose message chat username matches TARGET (without the '@').
+    Asynchronously fetches the latest updates from the bot and returns a list of show dictionaries.
+    Filters updates where the message chat username matches TARGET (without '@').
     """
     try:
-        updates = bot.get_updates()
+        # Await the asynchronous get_updates() call
+        updates = await bot.get_updates()
     except TelegramError as e:
         print(f"Error fetching updates: {e}")
         return []
-    
+
     shows = []
     target_username = TARGET.lstrip('@')
     for update in updates:
@@ -73,11 +93,6 @@ def fetch_latest_shows(limit: int = 10) -> list:
             parsed = parse_message(update.message)
             if parsed:
                 shows.append(parsed)
-            if len(shows) >= limit:
-                break
+        if len(shows) >= limit:
+            break
     return shows
-
-# Provide an async wrapper so that FastAPI endpoints can await fetching shows.
-async def async_fetch_latest_shows(limit: int = 10) -> list:
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, fetch_latest_shows, limit)
