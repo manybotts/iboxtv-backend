@@ -7,5 +7,6 @@ class Show(BaseModel):
     is_streamable: bool
     popularity: int
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
