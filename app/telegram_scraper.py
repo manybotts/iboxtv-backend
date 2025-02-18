@@ -74,7 +74,7 @@ def parse_message(message):
         "popularity": 0
     }
 
-def fetch_messages_from_channel():
+async def fetch_messages_from_channel():
     """
     Fetches the latest messages from the specified channel using the bot.
     """
@@ -92,38 +92,10 @@ def fetch_messages_from_channel():
         print(f"Error fetching messages: {e}")
         return []
 
-def start(update, context):
+async def fetch_latest_shows(limit=10):
     """
-    Command handler for the '/start' command to test bot functionality.
+    Asynchronously fetches the latest messages from the Telegram group/channel,
+    parses them, and returns a list of show dictionaries.
     """
-    update.message.reply_text("Bot is online. Use /fetch to fetch shows!")
-
-def fetch(update, context):
-    """
-    Command handler for the '/fetch' command to fetch the latest shows.
-    """
-    shows = fetch_messages_from_channel()
-    if shows:
-        message = "Fetched the following shows:\n"
-        for show in shows:
-            message += f"{show['title']} ({show['season_episode']})\n"
-        update.message.reply_text(message)
-    else:
-        update.message.reply_text("No shows found.")
-
-def main():
-    """
-    Initializes the bot and starts fetching the shows.
-    """
-    # Initialize the application using the correct method
-    application = Application.builder().token(BOT_TOKEN).build()
-
-    # Register command handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("fetch", fetch))
-
-    # Start polling for new messages
-    application.run_polling()
-
-if __name__ == "__main__":
-    main()
+    shows = await fetch_messages_from_channel()
+    return shows
