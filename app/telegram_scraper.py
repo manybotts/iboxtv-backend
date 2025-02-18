@@ -15,7 +15,7 @@ SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING", "")
 if not API_ID or not API_HASH or not CHANNEL or not OMDB_API_KEY:
     raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_CHANNEL, and OMDB_API_KEY environment variables.")
 
-# Initialize the Telegram client using an in-memory session to avoid SQLite locking issues.
+# Initialize the Telegram client using MemorySession to avoid SQLite locking issues.
 client = None
 if SESSION_STRING and hasattr(TelegramClient, "from_session_string"):
     try:
@@ -61,7 +61,7 @@ def parse_message(message):
       Line 1: Show Name
       Line 2: Season and Episode info (e.g., "Season 23 Episode 1")
       Line 3: Contains the text "CLICK HERE" with an embedded URL for downloads.
-      
+    
     Returns a dictionary with:
       - title: The show name from line 1.
       - season_episode: The season/episode info from line 2.
@@ -81,7 +81,7 @@ def parse_message(message):
     show_title = lines[0]
     season_episode = lines[1]
 
-    # Extract the download URL from the third line using regex
+    # Extract the download URL from the third line: look for "CLICK HERE" followed by a URL.
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
 
@@ -97,13 +97,13 @@ def parse_message(message):
         "popularity": 0
     }
 
-def fetch_latest_shows(limit=10):
+async def fetch_latest_shows(limit=10):
     """
-    Synchronously fetches the latest messages from the Telegram channel,
+    Asynchronously fetches the latest messages from the Telegram channel,
     parses them, and returns a list of show dictionaries.
     """
     try:
-        messages = asyncio.run(fetch_messages(limit=limit))
+        messages = await fetch_messages(limit=limit)
     except Exception as e:
         print(f"Error fetching messages: {e}")
         return []
