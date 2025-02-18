@@ -1,8 +1,6 @@
-python-telegram-bot
 fastapi
 uvicorn
 firebase-admin
-telethon
+python-telegram-bot
 requests
 pydantic
-sqlalchemy
