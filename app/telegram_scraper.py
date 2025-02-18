@@ -15,21 +15,19 @@ SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING", "")
 if not API_ID or not API_HASH or not CHANNEL or not OMDB_API_KEY:
     raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_CHANNEL, and OMDB_API_KEY environment variables.")
 
-# Initialize the Telegram client using MemorySession to avoid SQLite locking issues.
-client = None
-if SESSION_STRING and hasattr(TelegramClient, "from_session_string"):
-    try:
+# Attempt to initialize TelegramClient using the session string if provided and supported.
+try:
+    if SESSION_STRING and hasattr(TelegramClient, "from_session_string"):
         client = TelegramClient.from_session_string(SESSION_STRING, API_ID, API_HASH)
-    except Exception as e:
-        print("Error initializing TelegramClient from session string:", e)
+    else:
         client = TelegramClient(MemorySession(), API_ID, API_HASH)
-else:
+except Exception as e:
+    print("Error initializing TelegramClient from session string:", e)
     client = TelegramClient(MemorySession(), API_ID, API_HASH)
 
 async def fetch_messages(limit=10):
     await client.start()
     try:
-        # Get the channel entity and fetch the latest messages
         channel_entity = await client.get_entity(CHANNEL)
         messages = await client.get_messages(channel_entity, limit=limit)
         return messages
@@ -57,11 +55,10 @@ def fetch_omdb_data(title):
 def parse_message(message):
     """
     Parses a Telegram message caption with the following structure:
-    
       Line 1: Show Name
       Line 2: Season and Episode info (e.g., "Season 23 Episode 1")
       Line 3: Contains the text "CLICK HERE" with an embedded URL for downloads.
-    
+
     Returns a dictionary with:
       - title: The show name from line 1.
       - season_episode: The season/episode info from line 2.
@@ -73,7 +70,7 @@ def parse_message(message):
     if not message.text:
         return None
 
-    # Split the message text into non-empty lines
+    # Split message into non-empty lines
     lines = [line.strip() for line in message.text.split("\n") if line.strip()]
     if len(lines) < 3:
         return None
@@ -81,11 +78,11 @@ def parse_message(message):
     show_title = lines[0]
     season_episode = lines[1]
 
-    # Extract the download URL from the third line: look for "CLICK HERE" followed by a URL.
+    # Extract URL from the text "CLICK HERE" using regex
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
 
-    # Enrich data using OMDb API
+    # Fetch additional details from the OMDb API using the show title
     omdb_data = fetch_omdb_data(show_title)
 
     return {
