@@ -1,8 +1,8 @@
 import logging
 from fastapi import FastAPI, HTTPException, Depends
-from app import schemas, telegram_scraper, models
-from app.database import SessionLocal, engine
 from sqlalchemy.orm import Session
+from .database import SessionLocal, engine
+from . import models, schemas, telegram_scraper
 
 # Create database tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
@@ -17,8 +17,7 @@ def get_db():
     finally:
         db.close()
 
-# For Firestore or SQL databases, use appropriate data access functions.
-# Here we assume a function to insert a show if not exists (this example is for SQLAlchemy)
+# Helper function to insert a show if it doesn't exist (case-insensitive check)
 def insert_show_if_not_exists(db: Session, show_data):
     existing = db.query(models.Show).filter(models.Show.title.ilike(show_data["title"])).first()
     if not existing:
@@ -41,7 +40,6 @@ def insert_show_if_not_exists(db: Session, show_data):
 @app.on_event("startup")
 async def populate_db():
     logger.info("Startup: Checking if the database has TV show data.")
-    # Here, we use a SQLAlchemy session for demonstration.
     db = next(get_db())
     if db.query(models.Show).count() == 0:
         new_shows = await telegram_scraper.fetch_latest_shows(limit=10)
@@ -62,10 +60,7 @@ async def fetch_shows(db: Session = Depends(get_db)):
     for show_data in new_shows_data:
         if insert_show_if_not_exists(db, show_data):
             inserted_shows.append(show_data["title"])
-    return {
-        "message": f"Fetched and inserted {len(inserted_shows)} new shows",
-        "shows": inserted_shows
-    }
+    return {"message": f"Fetched and inserted {len(inserted_shows)} new shows", "shows": inserted_shows}
 
 @app.get("/shows", response_model=list[schemas.Show], tags=["Shows"])
 async def list_shows(db: Session = Depends(get_db)):
