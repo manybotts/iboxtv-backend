@@ -1,6 +1,6 @@
 fastapi
 uvicorn
 firebase-admin
-python-telegram-bot
+telethon
 requests
 pydantic
