@@ -7,7 +7,7 @@ from telegram.error import TelegramError
 # Retrieve environment variables
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OMDB_API_KEY = os.getenv("OMDB_API_KEY")
-# Use TELEGRAM_GROUP if provided; otherwise, fallback to TELEGRAM_CHANNEL.
+# Use TELEGRAM_GROUP if provided; otherwise, fall back to TELEGRAM_CHANNEL.
 TARGET = os.getenv("TELEGRAM_GROUP") or os.getenv("TELEGRAM_CHANNEL")
 
 if not BOT_TOKEN or not OMDB_API_KEY or not TARGET:
@@ -57,6 +57,7 @@ def parse_message(message: Update) -> dict:
 
     show_title = lines[0]
     season_episode = lines[1]
+
     # Look for "CLICK HERE" followed by a URL in the third line.
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
@@ -74,17 +75,21 @@ def parse_message(message: Update) -> dict:
 async def fetch_latest_shows(limit: int = 10) -> list:
     """
     Asynchronously fetches updates from the bot and returns a list of show dictionaries.
-    We now await bot.get_updates(timeout=10) so that we get a list of updates.
+    Here, we explicitly request updates of type "channel_post" so that the bot receives posts from the channel.
     """
     try:
-        updates = await bot.get_updates(timeout=10)
+        # Await the get_updates call, requesting channel_post updates.
+        updates = await bot.get_updates(timeout=10, allowed_updates=["channel_post"])
     except TelegramError as e:
         print(f"Error fetching updates: {e}")
         return []
     
     shows = []
+    # TARGET might include an '@', so remove it for comparison.
     target_username = TARGET.lstrip('@')
     for update in updates:
+        # For channel posts, the update.message is present and update.channel_post may be used;
+        # however, many bots receive channel posts in update.message.
         if update.message and update.message.chat.username == target_username:
             parsed = parse_message(update.message)
             if parsed:
