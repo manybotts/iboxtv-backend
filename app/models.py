@@ -1,11 +1,14 @@
-from sqlalchemy import Column, Integer, String, Boolean
-from app.database import Base
+from pydantic import BaseModel
 
-class Show(Base):
-    __tablename__ = "shows"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, index=True, nullable=False, unique=True)  # Unique constraint to prevent duplicates
-    download_link = Column(String, nullable=False)
-    is_streamable = Column(Boolean, default=False)
-    popularity = Column(Integer, default=0)
+class Show(BaseModel):
+    id: str = None
+    title: str
+    season_episode: str
+    download_link: str
+    poster: str
+    description: str
+    popularity: int = 0
+
+    model_config = {
+        "from_attributes": True  # For Pydantic v2 (for v1, use "orm_mode": True)
+    }
