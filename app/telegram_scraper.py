@@ -7,27 +7,24 @@ from telethon import TelegramClient
 # Retrieve credentials and channel info from environment variables
 API_ID = int(os.getenv("TELEGRAM_API_ID", 0))
 API_HASH = os.getenv("TELEGRAM_API_HASH")
+# Use the session string if available
+SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING")
 CHANNEL = os.getenv("TELEGRAM_CHANNEL")  # e.g., "@iBOXTVChannel"
 OMDB_API_KEY = os.getenv("OMDB_API_KEY")   # Your OMDb API key
 
-if not API_ID or not API_HASH or not CHANNEL or not OMDB_API_KEY:
-    raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_CHANNEL, and OMDB_API_KEY environment variables.")
+if not API_ID or not API_HASH or not SESSION_STRING or not CHANNEL or not OMDB_API_KEY:
+    raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_STRING, TELEGRAM_CHANNEL, and OMDB_API_KEY environment variables.")
 
-# Initialize the Telegram client using a persistent session file for a user session.
-# The session file ("iboxtv_session.session") will be created upon first login.
-client = TelegramClient("iboxtv_session", API_ID, API_HASH)
+# Initialize the Telegram client from the session string
+client = TelegramClient.from_session_string(SESSION_STRING, API_ID, API_HASH)
 
 async def fetch_messages(limit=10):
-    # Start the client; if no session exists, you'll be prompted for authentication.
-    await client.start()
+    await client.connect()
     try:
-        # Get the channel entity using the provided channel username or ID.
         channel_entity = await client.get_entity(CHANNEL)
-        # Fetch the latest messages from the channel.
         messages = await client.get_messages(channel_entity, limit=limit)
         return messages
     finally:
-        # Optionally, disconnect the client.
         await client.disconnect()
 
 def fetch_omdb_data(title):
@@ -62,12 +59,12 @@ def parse_message(message):
       - download_link: The URL extracted from the third line.
       - poster: Poster URL fetched from OMDb API using the show title.
       - description: Show description (Plot) from OMDb API.
-      - popularity: Defaulted to 0 (adjust as needed).
+      - popularity: Defaulted to 0.
     """
     if not message.text:
         return None
 
-    # Split message into non-empty lines
+    # Split message text into non-empty lines
     lines = [line.strip() for line in message.text.split("\n") if line.strip()]
     if len(lines) < 3:
         return None
@@ -75,7 +72,7 @@ def parse_message(message):
     show_title = lines[0]
     season_episode = lines[1]
 
-    # Extract the URL from the third line by finding "CLICK HERE" followed by a URL
+    # Extract the download link from the third line by finding "CLICK HERE" followed by a URL.
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
 
@@ -92,10 +89,6 @@ def parse_message(message):
     }
 
 async def fetch_latest_shows(limit=10):
-    """
-    Asynchronously fetches the latest messages from the Telegram channel,
-    parses them, and returns a list of show dictionaries.
-    """
     try:
         messages = await fetch_messages(limit=limit)
     except Exception as e:
