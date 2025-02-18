@@ -7,8 +7,6 @@ import logging
 app = FastAPI(title="iBOX TV API (Firebase)")
 logger = logging.getLogger(__name__)
 
-# Firebase helper functions
-
 def get_all_shows():
     shows_ref = db.collection("shows")
     docs = shows_ref.stream()
@@ -20,10 +18,9 @@ def get_all_shows():
     return shows
 
 def insert_show_if_not_exists(show_data: dict) -> bool:
-    # Check if a show with the same title exists (exact match).
     query = db.collection("shows").where("title", "==", show_data["title"]).get()
     if query:
-        return False  # Show exists already.
+        return False
     db.collection("shows").add(show_data)
     return True
 
