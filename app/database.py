@@ -3,10 +3,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Retrieve DATABASE_URL from the environment; if not set, use a local default.
+# Retrieve the DATABASE_URL environment variable. 
+# This works for Heroku Postgres (which might use 'postgres://') or a local database.
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/iboxtv_db")
 
-# Replace "postgres://" with "postgresql://" if necessary.
+# If the URL starts with 'postgres://', replace it with 'postgresql://' for SQLAlchemy compatibility.
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
