@@ -4,7 +4,7 @@ import asyncio
 import requests
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
-from telethon.errors import TelegramError
+from telethon.errors.rpcerrorlist import RPCError
 
 # Retrieve environment variables
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -22,14 +22,14 @@ client = TelegramClient(MemorySession(), API_ID, API_HASH)
 
 async def fetch_messages(limit: int = 10):
     """
-    Starts the client in bot mode, fetches the target entity, and then retrieves messages.
+    Starts the client in bot mode, fetches the target entity, and retrieves messages.
     """
     await client.start(bot_token=BOT_TOKEN)
     try:
         target_entity = await client.get_entity(TARGET)
         messages = await client.get_messages(target_entity, limit=limit)
         return messages
-    except TelegramError as e:
+    except RPCError as e:
         print(f"Error fetching messages: {e}")
         return []
     finally:
@@ -56,15 +56,15 @@ def parse_message(message) -> dict:
     Expects the Telegram message caption to have at least three non-empty lines:
       - Line 1: Show Name
       - Line 2: Season and Episode info (e.g., "Season 23 Episode 1")
-      - Line 3: Contains the text "CLICK HERE" with an embedded URL for downloads.
+      - Line 3: Contains "CLICK HERE" with an embedded URL for downloads.
     
     Returns a dictionary with:
-      - title: The show name from line 1.
-      - season_episode: The season/episode info from line 2.
-      - download_link: The URL extracted from line 3 (following "CLICK HERE").
-      - poster: Poster URL from OMDb API using the show title.
-      - description: Plot description from OMDb API using the show title.
-      - popularity: Defaults to 0.
+      - title: The show name (from line 1)
+      - season_episode: The season/episode info (from line 2)
+      - download_link: The URL extracted from line 3 (following "CLICK HERE")
+      - poster: Poster URL from OMDb API using the show title
+      - description: Plot description from OMDb API using the show title
+      - popularity: Defaults to 0
     """
     if not message.text:
         return None
@@ -93,16 +93,14 @@ def parse_message(message) -> dict:
 
 async def fetch_latest_shows(limit: int = 10) -> list:
     """
-    Asynchronously fetches messages using Telethon (in bot mode),
-    filters them for those from the target chat (by username),
-    parses them, and returns a list of show dictionaries.
+    Asynchronously fetches messages from the target Telegram group/channel,
+    filters them by chat username, parses them, and returns a list of show dictionaries.
     """
     messages = await fetch_messages(limit=limit)
     shows = []
-    target_username = TARGET.lstrip('@')
+    target_username = TARGET.lstrip('@').lower()
     for msg in messages:
-        # Ensure that the message's chat username matches our target.
-        if msg.chat and msg.chat.username and msg.chat.username.lower() == target_username.lower():
+        if msg.chat and msg.chat.username and msg.chat.username.lower() == target_username:
             parsed = parse_message(msg)
             if parsed:
                 shows.append(parsed)
