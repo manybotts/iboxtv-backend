@@ -5,25 +5,24 @@ import requests
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
 
-# Retrieve your Telegram API credentials and target info from environment variables
+# Retrieve credentials and target info from environment variables
 API_ID = int(os.getenv("TELEGRAM_API_ID", 0))
 API_HASH = os.getenv("TELEGRAM_API_HASH")
 # Prefer using TELEGRAM_GROUP if set; otherwise, fall back to TELEGRAM_CHANNEL
 TARGET = os.getenv("TELEGRAM_GROUP") or os.getenv("TELEGRAM_CHANNEL")
-OMDB_API_KEY = os.getenv("OMDB_API_KEY")   # Your OMDb API key
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Your Telegram Bot Token
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+OMDB_API_KEY = os.getenv("OMDB_API_KEY")
 
-if not API_ID or not API_HASH or not TARGET or not OMDB_API_KEY or not BOT_TOKEN:
-    raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, either TELEGRAM_GROUP or TELEGRAM_CHANNEL, OMDB_API_KEY, and TELEGRAM_BOT_TOKEN environment variables.")
+if not API_ID or not API_HASH or not TARGET or not BOT_TOKEN or not OMDB_API_KEY:
+    raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, either TELEGRAM_GROUP or TELEGRAM_CHANNEL, TELEGRAM_BOT_TOKEN, and OMDB_API_KEY environment variables.")
 
-# Initialize the Telegram client using a MemorySession for bot authentication
+# Initialize the Telegram client with an in-memory session
 client = TelegramClient(MemorySession(), API_ID, API_HASH)
 
 async def fetch_messages(limit=10):
-    # Start the client in bot mode using the provided token (avoids interactive prompts)
+    # Log in as a bot using the bot token (this avoids interactive prompts)
     await client.start(bot_token=BOT_TOKEN)
     try:
-        # Get the entity for the target (group or channel)
         target_entity = await client.get_entity(TARGET)
         messages = await client.get_messages(target_entity, limit=limit)
         return messages
@@ -40,10 +39,7 @@ def fetch_omdb_data(title):
         if response.status_code == 200:
             data = response.json()
             if data.get("Response") == "True":
-                return {
-                    "poster": data.get("Poster", ""),
-                    "description": data.get("Plot", "")
-                }
+                return {"poster": data.get("Poster", ""), "description": data.get("Plot", "")}
     except Exception as e:
         print("OMDb API error:", e)
     return {"poster": "", "description": ""}
@@ -54,7 +50,7 @@ def parse_message(message):
       Line 1: Show Name
       Line 2: Season and Episode info (e.g., "Season 23 Episode 1")
       Line 3: Contains the text "CLICK HERE" with an embedded URL for downloads.
-
+      
     Returns a dictionary with:
       - title: The show name from line 1.
       - season_episode: The season/episode info from line 2.
@@ -73,14 +69,10 @@ def parse_message(message):
 
     show_title = lines[0]
     season_episode = lines[1]
-
-    # Extract URL from the third line: look for "CLICK HERE" followed by a URL.
+    # Extract URL from the text "CLICK HERE" using regex
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
-
-    # Enrich data using OMDb API
     omdb_data = fetch_omdb_data(show_title)
-
     return {
         "title": show_title,
         "season_episode": season_episode,
