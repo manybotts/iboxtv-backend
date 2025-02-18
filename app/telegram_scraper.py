@@ -1,20 +1,39 @@
 import re
 import os
+import asyncio
 import requests
-from telegram import Bot, Update
-from telegram.error import TelegramError
+from telethon import TelegramClient
+from telethon.sessions import MemorySession
+from telethon.errors import TelegramError
 
 # Retrieve environment variables
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OMDB_API_KEY = os.getenv("OMDB_API_KEY")
-# Use TELEGRAM_GROUP if provided; otherwise, fall back to TELEGRAM_CHANNEL.
+API_ID = int(os.getenv("TELEGRAM_API_ID", 0))
+API_HASH = os.getenv("TELEGRAM_API_HASH")
+# Use TELEGRAM_GROUP if provided; otherwise, fallback to TELEGRAM_CHANNEL.
 TARGET = os.getenv("TELEGRAM_GROUP") or os.getenv("TELEGRAM_CHANNEL")
+OMDB_API_KEY = os.getenv("OMDB_API_KEY")
 
-if not BOT_TOKEN or not OMDB_API_KEY or not TARGET:
-    raise ValueError("Please set TELEGRAM_BOT_TOKEN, OMDB_API_KEY, and TELEGRAM_GROUP or TELEGRAM_CHANNEL environment variables.")
+if not BOT_TOKEN or not API_ID or not API_HASH or not TARGET or not OMDB_API_KEY:
+    raise ValueError("Please set TELEGRAM_BOT_TOKEN, TELEGRAM_API_ID, TELEGRAM_API_HASH, and TELEGRAM_GROUP (or TELEGRAM_CHANNEL), and OMDB_API_KEY.")
 
-# Initialize the bot
-bot = Bot(token=BOT_TOKEN)
+# Initialize the Telegram client using an in-memory session.
+client = TelegramClient(MemorySession(), API_ID, API_HASH)
+
+async def fetch_messages(limit: int = 10):
+    """
+    Starts the client in bot mode, fetches the target entity, and then retrieves messages.
+    """
+    await client.start(bot_token=BOT_TOKEN)
+    try:
+        target_entity = await client.get_entity(TARGET)
+        messages = await client.get_messages(target_entity, limit=limit)
+        return messages
+    except TelegramError as e:
+        print(f"Error fetching messages: {e}")
+        return []
+    finally:
+        await client.disconnect()
 
 def fetch_omdb_data(title: str) -> dict:
     """
@@ -32,20 +51,20 @@ def fetch_omdb_data(title: str) -> dict:
         print("OMDb API error:", e)
     return {"poster": "", "description": ""}
 
-def parse_message(message: Update) -> dict:
+def parse_message(message) -> dict:
     """
     Expects the Telegram message caption to have at least three non-empty lines:
       - Line 1: Show Name
       - Line 2: Season and Episode info (e.g., "Season 23 Episode 1")
-      - Line 3: Contains "CLICK HERE" with an embedded URL for downloads.
+      - Line 3: Contains the text "CLICK HERE" with an embedded URL for downloads.
     
     Returns a dictionary with:
-      - title: (from line 1)
-      - season_episode: (from line 2)
-      - download_link: URL extracted from line 3 (following "CLICK HERE")
-      - poster: Poster URL fetched from OMDb API using the show title
-      - description: Show description (Plot) from OMDb API using the show title
-      - popularity: Defaults to 0
+      - title: The show name from line 1.
+      - season_episode: The season/episode info from line 2.
+      - download_link: The URL extracted from line 3 (following "CLICK HERE").
+      - poster: Poster URL from OMDb API using the show title.
+      - description: Plot description from OMDb API using the show title.
+      - popularity: Defaults to 0.
     """
     if not message.text:
         return None
@@ -74,24 +93,17 @@ def parse_message(message: Update) -> dict:
 
 async def fetch_latest_shows(limit: int = 10) -> list:
     """
-    Asynchronously fetches updates from the bot and returns a list of show dictionaries.
-    Here, we explicitly request updates of type "channel_post" so that the bot receives posts from the channel.
+    Asynchronously fetches messages using Telethon (in bot mode),
+    filters them for those from the target chat (by username),
+    parses them, and returns a list of show dictionaries.
     """
-    try:
-        # Await the get_updates call, requesting channel_post updates.
-        updates = await bot.get_updates(timeout=10, allowed_updates=["channel_post"])
-    except TelegramError as e:
-        print(f"Error fetching updates: {e}")
-        return []
-    
+    messages = await fetch_messages(limit=limit)
     shows = []
-    # TARGET might include an '@', so remove it for comparison.
     target_username = TARGET.lstrip('@')
-    for update in updates:
-        # For channel posts, the update.message is present and update.channel_post may be used;
-        # however, many bots receive channel posts in update.message.
-        if update.message and update.message.chat.username == target_username:
-            parsed = parse_message(update.message)
+    for msg in messages:
+        # Ensure that the message's chat username matches our target.
+        if msg.chat and msg.chat.username and msg.chat.username.lower() == target_username.lower():
+            parsed = parse_message(msg)
             if parsed:
                 shows.append(parsed)
         if len(shows) >= limit:
