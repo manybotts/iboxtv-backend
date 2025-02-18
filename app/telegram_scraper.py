@@ -7,7 +7,7 @@ from telegram.error import TelegramError
 # Retrieve environment variables
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OMDB_API_KEY = os.getenv("OMDB_API_KEY")
-# Use TELEGRAM_GROUP if set; otherwise, fallback to TELEGRAM_CHANNEL
+# Use TELEGRAM_GROUP if provided; otherwise, fallback to TELEGRAM_CHANNEL.
 TARGET = os.getenv("TELEGRAM_GROUP") or os.getenv("TELEGRAM_CHANNEL")
 
 if not BOT_TOKEN or not OMDB_API_KEY or not TARGET:
@@ -18,7 +18,8 @@ bot = Bot(token=BOT_TOKEN)
 
 def fetch_omdb_data(title: str) -> dict:
     """
-    Calls the OMDb API to retrieve additional show data (poster and description) using the provided show title.
+    Calls the OMDb API to retrieve additional show data (poster and description)
+    using the provided show title.
     """
     try:
         url = f"http://www.omdbapi.com/?apikey={OMDB_API_KEY}&t={title}"
@@ -26,10 +27,7 @@ def fetch_omdb_data(title: str) -> dict:
         if response.status_code == 200:
             data = response.json()
             if data.get("Response") == "True":
-                return {
-                    "poster": data.get("Poster", ""),
-                    "description": data.get("Plot", "")
-                }
+                return {"poster": data.get("Poster", ""), "description": data.get("Plot", "")}
     except Exception as e:
         print("OMDb API error:", e)
     return {"poster": "", "description": ""}
@@ -44,8 +42,8 @@ def parse_message(message: Update) -> dict:
     Returns a dictionary with:
       - title: Show name (from line 1)
       - season_episode: Season/Episode info (from line 2)
-      - download_link: The URL extracted from line 3 (following "CLICK HERE")
-      - poster: Poster URL from OMDb API using the show title
+      - download_link: URL extracted from line 3 (following "CLICK HERE")
+      - poster: Poster URL fetched from OMDb API using the show title
       - description: Show description (Plot) from OMDb API using the show title
       - popularity: Defaults to 0
     """
@@ -74,18 +72,19 @@ def parse_message(message: Update) -> dict:
         "popularity": 0
     }
 
-async def fetch_latest_shows(limit: int = 10) -> list:
+def fetch_latest_shows(limit: int = 10) -> list:
     """
-    Asynchronously fetches the latest updates from the bot and returns a list of show dictionaries.
-    Filters updates where the message chat username matches TARGET (without '@').
+    Synchronously fetches updates from the bot and returns a list of show dictionaries.
+    Filters updates where the message chat username matches TARGET (without the '@').
+    We pass a timeout parameter to get_updates() so that if no updates arrive within 10 seconds,
+    it returns an empty list.
     """
     try:
-        # Await the asynchronous get_updates() call
-        updates = await bot.get_updates()
+        updates = bot.get_updates(timeout=10)
     except TelegramError as e:
         print(f"Error fetching updates: {e}")
         return []
-
+    
     shows = []
     target_username = TARGET.lstrip('@')
     for update in updates:
@@ -96,3 +95,9 @@ async def fetch_latest_shows(limit: int = 10) -> list:
         if len(shows) >= limit:
             break
     return shows
+
+# Provide an async wrapper for FastAPI endpoints to await this synchronous function.
+async def async_fetch_latest_shows(limit: int = 10) -> list:
+    import asyncio
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, fetch_latest_shows, limit)
