@@ -1,10 +1,11 @@
+import re
 import os
 import requests
 from telegram import Bot
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext import Application, CommandHandler
 from telegram.error import TelegramError
 
-# Retrieve your credentials and bot token
+# Retrieve your credentials and bot token from environment variables
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OMDB_API_KEY = os.getenv("OMDB_API_KEY")
 CHANNEL = os.getenv("TELEGRAM_CHANNEL")  # The channel or group to fetch from
@@ -114,15 +115,15 @@ def main():
     """
     Initializes the bot and starts fetching the shows.
     """
-    updater = Updater(token=BOT_TOKEN, use_context=True)
-    dp = updater.dispatcher
+    # Initialize the application using the correct method
+    application = Application.builder().token(BOT_TOKEN).build()
 
     # Register command handlers
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("fetch", fetch))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("fetch", fetch))
 
     # Start polling for new messages
-    updater.start_polling()
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
