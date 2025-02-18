@@ -5,22 +5,21 @@ import requests
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
 
-# Retrieve your Telegram API credentials, bot token, channel info, and OMDb API key from environment variables
+# Retrieve credentials and channel info from environment variables
 API_ID = int(os.getenv("TELEGRAM_API_ID", 0))
 API_HASH = os.getenv("TELEGRAM_API_HASH")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL = os.getenv("TELEGRAM_CHANNEL")  # e.g., "@iBOXTVChannel"
-OMDB_API_KEY = os.getenv("OMDB_API_KEY")   # Your OMDb API key
+OMDB_API_KEY = os.getenv("OMDB_API_KEY")  # Your OMDb API key
 
 if not API_ID or not API_HASH or not BOT_TOKEN or not CHANNEL or not OMDB_API_KEY:
     raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL, and OMDB_API_KEY environment variables.")
 
-# Initialize the Telegram client using MemorySession to avoid SQLite file locking issues.
-client = TelegramClient(MemorySession(), API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+# Initialize the Telegram client using MemorySession (avoiding SQLite file locking)
+client = TelegramClient(MemorySession(), API_ID, API_HASH)
 
 async def fetch_messages(limit=10):
-    # Connect to Telegram and fetch the latest messages from the specified channel.
-    await client.connect()
+    await client.start(bot_token=BOT_TOKEN)
     try:
         channel_entity = await client.get_entity(CHANNEL)
         messages = await client.get_messages(channel_entity, limit=limit)
@@ -48,24 +47,24 @@ def fetch_omdb_data(title):
 
 def parse_message(message):
     """
-    Parses a Telegram message caption with the following general structure:
-    
+    Parses a Telegram message caption with the following structure:
+
       Line 1: Show Name
       Line 2: Season and Episode info (e.g., "Season 23 Episode 1")
-      Line 3: Contains the text "CLICK HERE" with an embedded URL (e.g., "CLICK HERE ✔️ https://t.me/...")
-    
+      Line 3: Contains the text "CLICK HERE" with an embedded URL (not in parentheses but within the text)
+
     Returns a dictionary with:
       - title: The show name from line 1.
       - season_episode: The season/episode info from line 2.
       - download_link: The URL extracted from the third line.
-      - poster: Poster URL from OMDb API using the show title.
+      - poster: Poster URL fetched from OMDb API using the show title.
       - description: Show description (Plot) from OMDb API.
-      - popularity: Defaulted to 0 (adjust as needed).
+      - popularity: Defaulted to 0.
     """
     if not message.text:
         return None
 
-    # Split the text into non-empty lines
+    # Split message text into non-empty lines
     lines = [line.strip() for line in message.text.split("\n") if line.strip()]
     if len(lines) < 3:
         return None
@@ -74,10 +73,11 @@ def parse_message(message):
     season_episode = lines[1]
 
     # Extract URL from the third line by looking for "CLICK HERE" followed by a URL.
+    # For example, the third line might be: "CLICK HERE ✔️ https://t.me/somechannel"
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
 
-    # Enrich data using the OMDb API with the show title
+    # Enrich data from OMDb API using the show title
     omdb_data = fetch_omdb_data(show_title)
 
     return {
@@ -86,16 +86,16 @@ def parse_message(message):
         "download_link": download_link,
         "poster": omdb_data.get("poster", ""),
         "description": omdb_data.get("description", ""),
-        "popularity": 0  # Adjust as needed
+        "popularity": 0  # Default popularity; adjust if needed
     }
 
-def fetch_latest_shows(limit=10):
+async def fetch_latest_shows(limit=10):
     """
-    Synchronously fetches the latest messages from the Telegram channel,
+    Asynchronously fetches the latest messages from the Telegram channel,
     parses them, and returns a list of show dictionaries.
     """
     try:
-        messages = asyncio.run(fetch_messages(limit=limit))
+        messages = await fetch_messages(limit=limit)
     except Exception as e:
         print(f"Error fetching messages: {e}")
         return []
