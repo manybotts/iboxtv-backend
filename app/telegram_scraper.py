@@ -5,25 +5,27 @@ import requests
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
 
-# Retrieve your Telegram API credentials, channel, and bot token from environment variables
+# Retrieve your Telegram API credentials and target info from environment variables
 API_ID = int(os.getenv("TELEGRAM_API_ID", 0))
 API_HASH = os.getenv("TELEGRAM_API_HASH")
-CHANNEL = os.getenv("TELEGRAM_CHANNEL")  # e.g., "@iBOXTVChannel"
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Bot token, required in this configuration
-OMDB_API_KEY = os.getenv("OMDB_API_KEY")       # Your OMDb API key
+# Prefer using TELEGRAM_GROUP if set; otherwise, fall back to TELEGRAM_CHANNEL
+TARGET = os.getenv("TELEGRAM_GROUP") or os.getenv("TELEGRAM_CHANNEL")
+OMDB_API_KEY = os.getenv("OMDB_API_KEY")   # Your OMDb API key
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Your Telegram Bot Token
 
-if not API_ID or not API_HASH or not CHANNEL or not BOT_TOKEN or not OMDB_API_KEY:
-    raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_CHANNEL, TELEGRAM_BOT_TOKEN, and OMDB_API_KEY environment variables.")
+if not API_ID or not API_HASH or not TARGET or not OMDB_API_KEY or not BOT_TOKEN:
+    raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, either TELEGRAM_GROUP or TELEGRAM_CHANNEL, OMDB_API_KEY, and TELEGRAM_BOT_TOKEN environment variables.")
 
-# Initialize the Telegram client using a MemorySession for bot login
+# Initialize the Telegram client using a MemorySession for bot authentication
 client = TelegramClient(MemorySession(), API_ID, API_HASH)
 
 async def fetch_messages(limit=10):
-    # Log in as bot (this won't prompt for a phone number)
+    # Start the client in bot mode using the provided token (avoids interactive prompts)
     await client.start(bot_token=BOT_TOKEN)
     try:
-        channel_entity = await client.get_entity(CHANNEL)
-        messages = await client.get_messages(channel_entity, limit=limit)
+        # Get the entity for the target (group or channel)
+        target_entity = await client.get_entity(TARGET)
+        messages = await client.get_messages(target_entity, limit=limit)
         return messages
     finally:
         await client.disconnect()
@@ -49,11 +51,10 @@ def fetch_omdb_data(title):
 def parse_message(message):
     """
     Parses a Telegram message caption with the following structure:
-    
       Line 1: Show Name
       Line 2: Season and Episode info (e.g., "Season 23 Episode 1")
       Line 3: Contains the text "CLICK HERE" with an embedded URL for downloads.
-    
+
     Returns a dictionary with:
       - title: The show name from line 1.
       - season_episode: The season/episode info from line 2.
@@ -73,10 +74,11 @@ def parse_message(message):
     show_title = lines[0]
     season_episode = lines[1]
 
-    # Extract the download URL from the third line; look for "CLICK HERE" followed by a URL.
+    # Extract URL from the third line: look for "CLICK HERE" followed by a URL.
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
 
+    # Enrich data using OMDb API
     omdb_data = fetch_omdb_data(show_title)
 
     return {
@@ -90,7 +92,7 @@ def parse_message(message):
 
 async def fetch_latest_shows(limit=10):
     """
-    Asynchronously fetches the latest messages from the Telegram channel,
+    Asynchronously fetches the latest messages from the Telegram group/channel,
     parses them, and returns a list of show dictionaries.
     """
     try:
