@@ -5,28 +5,22 @@ import requests
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
 
-# Retrieve your Telegram API credentials and channel info from environment variables
+# Retrieve your Telegram API credentials, channel, and bot token from environment variables
 API_ID = int(os.getenv("TELEGRAM_API_ID", 0))
 API_HASH = os.getenv("TELEGRAM_API_HASH")
 CHANNEL = os.getenv("TELEGRAM_CHANNEL")  # e.g., "@iBOXTVChannel"
-OMDB_API_KEY = os.getenv("OMDB_API_KEY")   # Your OMDb API key
-SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING", "")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Bot token, required in this configuration
+OMDB_API_KEY = os.getenv("OMDB_API_KEY")       # Your OMDb API key
 
-if not API_ID or not API_HASH or not CHANNEL or not OMDB_API_KEY:
-    raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_CHANNEL, and OMDB_API_KEY environment variables.")
+if not API_ID or not API_HASH or not CHANNEL or not BOT_TOKEN or not OMDB_API_KEY:
+    raise ValueError("Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_CHANNEL, TELEGRAM_BOT_TOKEN, and OMDB_API_KEY environment variables.")
 
-# Attempt to initialize TelegramClient using the session string if provided and supported.
-try:
-    if SESSION_STRING and hasattr(TelegramClient, "from_session_string"):
-        client = TelegramClient.from_session_string(SESSION_STRING, API_ID, API_HASH)
-    else:
-        client = TelegramClient(MemorySession(), API_ID, API_HASH)
-except Exception as e:
-    print("Error initializing TelegramClient from session string:", e)
-    client = TelegramClient(MemorySession(), API_ID, API_HASH)
+# Initialize the Telegram client using a MemorySession for bot login
+client = TelegramClient(MemorySession(), API_ID, API_HASH)
 
 async def fetch_messages(limit=10):
-    await client.start()
+    # Log in as bot (this won't prompt for a phone number)
+    await client.start(bot_token=BOT_TOKEN)
     try:
         channel_entity = await client.get_entity(CHANNEL)
         messages = await client.get_messages(channel_entity, limit=limit)
@@ -55,10 +49,11 @@ def fetch_omdb_data(title):
 def parse_message(message):
     """
     Parses a Telegram message caption with the following structure:
+    
       Line 1: Show Name
       Line 2: Season and Episode info (e.g., "Season 23 Episode 1")
       Line 3: Contains the text "CLICK HERE" with an embedded URL for downloads.
-
+    
     Returns a dictionary with:
       - title: The show name from line 1.
       - season_episode: The season/episode info from line 2.
@@ -70,7 +65,7 @@ def parse_message(message):
     if not message.text:
         return None
 
-    # Split message into non-empty lines
+    # Split the message text into non-empty lines
     lines = [line.strip() for line in message.text.split("\n") if line.strip()]
     if len(lines) < 3:
         return None
@@ -78,11 +73,10 @@ def parse_message(message):
     show_title = lines[0]
     season_episode = lines[1]
 
-    # Extract URL from the text "CLICK HERE" using regex
+    # Extract the download URL from the third line; look for "CLICK HERE" followed by a URL.
     url_match = re.search(r'CLICK\s+HERE.*?(https?://\S+)', lines[2], re.IGNORECASE)
     download_link = url_match.group(1) if url_match else ""
 
-    # Fetch additional details from the OMDb API using the show title
     omdb_data = fetch_omdb_data(show_title)
 
     return {
